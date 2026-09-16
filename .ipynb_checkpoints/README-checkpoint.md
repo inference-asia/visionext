@@ -72,7 +72,7 @@ volumes:
 docker compose up -d
 ```
 
-The first start downloads the images (about 9 GB). If you pulled `1.0.0` before 16 September 2026, run `docker compose pull` once, the images were rebuilt under the same tag. Use port 8766 for faces. Pin a version tag in anything you deploy. The `gallery` volume is explained in [Face Gallery](#face-gallery). Keep the service names `objects` and `faces` as written, the dashboard finds the engines by those names. The `uploads` volume holds videos uploaded through the dashboard and is shared with both engines.
+The first start downloads the images (about 9 GB). Use port 8766 for faces. Pin a version tag in anything you deploy. The `gallery` volume is explained in [Face Gallery](#face-gallery). Keep the service names `objects` and `faces` as written, the dashboard finds the engines by those names. The `uploads` volume holds videos uploaded through the dashboard and is shared with both engines.
 
 Open `http://<host>:8767` in a browser, from the host or any machine on your network, to see the engines come up. Each one shows **Connected** once its model is loaded, which takes a few seconds after start. You can add a camera there right away, see [Dashboard](#dashboard), or continue with the SDK.
 
