@@ -19,14 +19,16 @@ This release includes:
 | `inferencetech/visionext-objects` | Detects people and animals (bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe) | `object.detected` |
 | `inferencetech/visionext-faces` | Detects faces and optionally matches them against a photo gallery you supply | `face.detected`, `face.recognized` |
 
+A third image, `inferencetech/visionext-dashboard`, is a web page for operating the engines by hand: add sources, watch the frames and their detections, inspect records. It needs no GPU and no code. See [Dashboard](#dashboard).
+
 These demonstration images are public. **Production images are private**, pulled with credentials we issue, and covered by a **commercial licensing agreement**.
 
-**Contents:** [About This Release](#about-this-release) · [How It Works](#how-it-works) · [Requirements](#requirements) · [Quick Start](#quick-start) · [Sources](#sources) · [SDK](#sdk) ([Errors](#errors), [`connect()` Options](#connect-options), [`Record`](#record), [`Event`](#event), [`Source`](#source)) · [Face Gallery](#face-gallery) · [Troubleshooting](#troubleshooting)
+**Contents:** [About This Release](#about-this-release) · [How It Works](#how-it-works) · [Requirements](#requirements) · [Quick Start](#quick-start) · [Dashboard](#dashboard) · [Sources](#sources) · [SDK](#sdk) ([Errors](#errors), [`connect()` Options](#connect-options), [`Record`](#record), [`Event`](#event), [`Source`](#source)) · [Face Gallery](#face-gallery) · [Troubleshooting](#troubleshooting)
 
 ## Requirements
 
 - Linux host with an NVIDIA GPU, NVIDIA driver 525 or newer, Docker Compose v2 and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). The containers are GPU-only.
-- Disk: about 16 GB for `visionext-objects` and 9 GB for `visionext-faces` once pulled.
+- Disk: about 16 GB for `visionext-objects` and 9 GB for `visionext-faces` once pulled. The dashboard is under 100 MB.
 - Python 3.10+ on the machine that will consume the records (the same host, or any machine that can reach the published ports).
 
 ## Quick Start
@@ -51,13 +53,20 @@ services:
       - "127.0.0.1:8766:8765"
     volumes:
       - ./gallery:/gallery:ro     # optional, see Face gallery
+  dashboard:
+    image: inferencetech/visionext-dashboard:1.0.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
 ```
 
 ```bash
 docker compose up -d
 ```
 
-The first start downloads the images (about 9 GB). Use port 8766 for faces. Pin a version tag in anything you deploy. The `gallery` volume is explained in [Face Gallery](#face-gallery).
+The first start downloads the images (about 9 GB). Use port 8766 for faces. Pin a version tag in anything you deploy. The `gallery` volume is explained in [Face Gallery](#face-gallery). Keep the service names `objects` and `faces` as written, the dashboard finds the engines by those names.
+
+Open [http://localhost:8080](http://localhost:8080) to see the engines come up. Each one shows **Connected** once its model is loaded, which takes a few seconds after start. You can add a camera there right away, see [Dashboard](#dashboard), or continue with the SDK.
 
 ### 2. Install the SDK
 
@@ -115,6 +124,19 @@ for t in threads:
 ```
 
 Without a gallery every face is reported as `unknown`. See [Face Gallery](#face-gallery) to get names.
+
+## Dashboard
+
+The dashboard is the same client as your application, in a browser. One tab per engine, each with:
+
+- **Sources**: add a stream URL or a file path inside the container, set `every_n_frames`, remove sources. The list is the engine's own, so sources added from the SDK appear here and the other way round.
+- **Live**: the latest sampled frame of every source with its detections drawn on it. Click a frame to see the record behind it, its events, and the JSON your application receives. Pause freezes the view while the counters keep running.
+- **Records** and **Detections**: the most recent records and events, newest first.
+
+Two things to know:
+
+- The dashboard is a client. While a tab is open the engines process frames for it, so a file source is read while you watch even if no application is connected.
+- It has no login. Anyone who can open the page can add sources and see frames. Publish it on a private interface, as in the quick start, or behind an authenticating reverse proxy, and never on the public internet.
 
 ## Sources
 
@@ -241,7 +263,7 @@ Stream drops and file ends are not exceptions. They arrive through `on_source` (
 
 ## Face Gallery
 
-`face-detector` recognizes people from photos you provide. One sub-folder per person, named with the identity you want in `event.identity`, mounted read-only at `/gallery`:
+`visionext-faces` recognizes people from photos you provide. One sub-folder per person, named with the identity you want in `event.identity`, mounted read-only at `/gallery`:
 
 ```
 gallery/
@@ -261,6 +283,7 @@ Face photos are biometric data. **Make sure you have consent and a legal basis**
 | Symptom | Cause / fix |
 | --- | --- |
 | `CUDA is required but unavailable` in `docker compose logs` | The GPU is not visible to the container. Check `gpus: all`, the NVIDIA Container Toolkit, and that `nvidia-smi` works on the host. |
+| The dashboard shows **Reconnecting** for an engine | The engine is still loading (a few seconds after start), or its compose service is not named `objects` / `faces`. |
 | `connect()` keeps waiting | The container is still loading (`docker compose logs` shows `Listening on` when ready), the port is not published, or the host port is wrong. |
 | Connected but no records | No sources (`stream.list_sources()`), or the source is `reconnecting`: check the URL and credentials. See [Sources](#sources). |
 | `RequestError: no such file inside the container: …` | You passed a host path, or the volume is not mounted. Mount the directory (see [Sources](#sources)) and use the path inside the container, for example `/input/video.mp4`. |
