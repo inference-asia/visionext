@@ -1,23 +1,25 @@
 <p align="center"><img src="logo.png" alt="VisioNext" width="520"></p>
 
-<p align="center">A camera-agnostic vision AI engine by <b>Inference Tech Sdn. Bhd.</b><br>Point it at any RTSP/RTMP camera or video file and receive detections as they happen.</p>
+<p align="center">A camera-agnostic vision AI engine by <b>Inference Tech Sdn. Bhd.</b><br>Connect any RTSP/RTMP camera or video file and receive detections as they happen.</p>
 
 ## About This Release
 
-This is a basic demonstration release. Its purpose is to show the integration pathway: how VisioNext is deployed next to your cameras, how your application connects to it, and what it receives back. The two capabilities included, object detection and face recognition, are examples chosen to exercise that pathway end to end. They are not the extent of what VisioNext does. Further capabilities are delivered the same way, as additional containers speaking the same SDK, so an integration built against this release carries over unchanged.
+This is a **demonstration release**. It exists to show the **integration pathway**: how VisioNext runs next to your cameras, how your application connects to it, and what it gets back.
 
-Only these demonstration images are public. In production, every VisioNext image is private, pulled with credentials we issue to you, and covered by a commercial licensing agreement.
+It ships with two capabilities, object detection and face recognition. **They are examples, not the product.** VisioNext delivers every capability the same way, as a container that speaks the same SDK, so **whatever you build against this release keeps working** as more capabilities are added.
 
 ## How It Works
 
-Each capability is a GPU container, published on Docker Hub under the `inferencetech` account. You run the containers with Docker Compose next to your cameras and talk to them with one Python SDK: add video sources, receive one record per sampled frame with the detections and the frame as JPEG. Nothing is written to disk. Your application decides what to keep.
+Every capability runs as a GPU container, published on Docker Hub under the `inferencetech` account. You start the containers with Docker Compose on a machine that can reach your cameras, then drive them from your application with the Python SDK: add a video source, and for every sampled frame you receive the detections together with the frame as a JPEG. **Nothing is written to disk.** Your application decides what to keep.
 
-This release ships two containers:
+This release includes:
 
 | Image | What it does | Events |
 | --- | --- | --- |
 | `inferencetech/visionext-objects` | Detects people and animals (bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe) | `object.detected` |
 | `inferencetech/visionext-faces` | Detects faces and optionally matches them against a photo gallery you supply | `face.detected`, `face.recognized` |
+
+These demonstration images are public. **Production images are private**, pulled with credentials we issue, and covered by a **commercial licensing agreement**.
 
 **Contents:** [About This Release](#about-this-release) · [How It Works](#how-it-works) · [Requirements](#requirements) · [Quick Start](#quick-start) · [Sources](#sources) · [SDK](#sdk) ([Errors](#errors), [`connect()` Options](#connect-options), [`Record`](#record), [`Event`](#event), [`Source`](#source)) · [Face Gallery](#face-gallery) · [Troubleshooting](#troubleshooting)
 
@@ -129,11 +131,11 @@ stream.add_source("/input/clip.mp4", every_n_frames=10)
 
 - `source_id` is carried by every record from the source. It defaults to the last path segment of the input without extension (`/input/clip.mp4` → `clip`). Letters, digits, `.`, `_` and `-` only, unique per container.
 - `every_n_frames` processes every Nth frame of that source and drops the others.
-- The container only processes frames while at least one client is connected. A file pauses while nobody is connected, so nothing in it is skipped.
+- The container **only processes frames while at least one client is connected**. A file pauses while nobody is connected, so nothing in it is skipped.
 - A file is read once. When it ends the container removes it and notifies your client (`ended`).
 - A stream that drops is retried forever with exponential backoff (1 s doubling up to 60 s) until you remove it. Your client is notified when it is `lost` and when it is `opened` again. Adding a stream that is unreachable succeeds with status `reconnecting`.
-- Sources live in the container's memory. After a restart the list is empty. The SDK re-adds the sources it added when it reconnects.
-- Anyone who can reach the port can add sources and receive frames. Keep it on a private interface, as in the quick start, or behind an authenticating reverse proxy.
+- Sources live in the container's memory. **After a restart the list is empty.** The SDK re-adds the sources it added when it reconnects.
+- **Anyone who can reach the port can add sources and receive frames.** Keep it on a private interface, as in the quick start, or behind an authenticating reverse proxy.
 
 ## SDK
 
@@ -252,7 +254,7 @@ gallery/
 - No gallery means detection only. Every face is `"unknown"` and `event.recognized` is false.
 - A match needs similarity 0.45 or more. If someone is found but reported unknown with similarity just below that, add more clear photos of them.
 
-Face photos are biometric data. Make sure you have consent and a legal basis before deploying recognition.
+Face photos are biometric data. **Make sure you have consent and a legal basis** before deploying recognition.
 
 ## Troubleshooting
 
