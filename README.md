@@ -57,7 +57,7 @@ services:
     image: inferencetech/visionext-dashboard:1.0.0
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8080:80"
+      - "127.0.0.1:8767:80"
 ```
 
 ```bash
@@ -66,7 +66,7 @@ docker compose up -d
 
 The first start downloads the images (about 9 GB). Use port 8766 for faces. Pin a version tag in anything you deploy. The `gallery` volume is explained in [Face Gallery](#face-gallery). Keep the service names `objects` and `faces` as written, the dashboard finds the engines by those names.
 
-Open [http://localhost:8080](http://localhost:8080) to see the engines come up. Each one shows **Connected** once its model is loaded, which takes a few seconds after start. You can add a camera there right away, see [Dashboard](#dashboard), or continue with the SDK.
+Open [http://localhost:8767](http://localhost:8767) to see the engines come up. Each one shows **Connected** once its model is loaded, which takes a few seconds after start. You can add a camera there right away, see [Dashboard](#dashboard), or continue with the SDK.
 
 ### 2. Install the SDK
 
