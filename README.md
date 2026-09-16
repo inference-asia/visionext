@@ -6,6 +6,8 @@
 
 This is a basic demonstration release. Its purpose is to show the integration pathway: how VisioNext is deployed next to your cameras, how your application connects to it, and what it receives back. The two capabilities included, object detection and face recognition, are examples chosen to exercise that pathway end to end. They are not the extent of what VisioNext does. Further capabilities are delivered the same way, as additional containers speaking the same SDK, so an integration built against this release carries over unchanged.
 
+Only these demonstration images are public. In production, every VisioNext image is private, pulled with credentials we issue to you, and covered by a commercial licensing agreement.
+
 ## How It Works
 
 Each capability is a GPU container, published on Docker Hub under the `inferencetech` account. You run the containers with Docker Compose next to your cameras and talk to them with one Python SDK: add video sources, receive one record per sampled frame with the detections and the frame as JPEG. Nothing is written to disk. Your application decides what to keep.
