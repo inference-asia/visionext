@@ -1,10 +1,10 @@
 <p align="center"><img src="logo.png" alt="VisioNext" width="520"></p>
 
-<p align="center">Containerised vision inference for RTSP/RTMP cameras and video files, by <b>Inference Tech Sdn. Bhd.</b></p>
+<p align="center">A vision AI engine for RTSP/RTMP cameras and video files, by <b>Inference Tech Sdn. Bhd.</b></p>
 
 ## Overview
 
-VisioNext packages each vision capability as a GPU container that ingests video sources and delivers structured detections to connected clients. Deployment is a Docker Compose file, integration is a Python SDK, and day-to-day operation is a browser dashboard. Every sampled frame produces one record holding the detections and the frame itself as a JPEG. The engine retains nothing on disk. What to keep, and for how long, is the consumer's decision.
+VisioNext is a vision AI engine. Each capability runs as a GPU container that ingests video sources and delivers structured detections to connected clients. Deployment is a Docker Compose file, integration is a Python SDK, and day-to-day operation is a browser dashboard. Every sampled frame produces one record holding the detections and the frame itself as a JPEG. The engine retains nothing on disk. What to keep, and for how long, is the consumer's decision.
 
 This demonstration release contains two engines. They illustrate the integration model rather than define the product: each VisioNext capability is delivered as a container with an identical interface, so code written against this release applies unchanged to capabilities released later.
 
