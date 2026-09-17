@@ -1,39 +1,33 @@
 <p align="center"><img src="logo.png" alt="VisioNext" width="520"></p>
 
-<p align="center">Vision AI for RTSP/RTMP cameras and video files, by <b>Inference Tech Sdn. Bhd.</b></p>
+<p align="center">Containerised vision inference for RTSP/RTMP cameras and video files, by <b>Inference Tech Sdn. Bhd.</b></p>
 
-## About This Release
+## Overview
 
-This is a demonstration release. It shows how VisioNext runs next to your cameras, how your application connects to it, and what it gets back.
+VisioNext packages each vision capability as a GPU container that ingests video sources and delivers structured detections to connected clients. Deployment is a Docker Compose file, integration is a Python SDK, and day-to-day operation is a browser dashboard. Every sampled frame produces one record holding the detections and the frame itself as a JPEG. The engine retains nothing on disk. What to keep, and for how long, is the consumer's decision.
 
-It includes two capabilities, object detection and face recognition. They are examples. Every capability ships the same way, as a container with the same SDK, so an integration built against this release also works with capabilities added later.
+This demonstration release contains two engines. They illustrate the integration model rather than define the product: each VisioNext capability is delivered as a container with an identical interface, so code written against this release applies unchanged to capabilities released later.
 
-The demonstration images are public. Production images are private, pulled with credentials we issue, and covered by a commercial licensing agreement.
-
-## How It Works
-
-Each capability is a GPU container on Docker Hub under `inferencetech`. Start the containers with Docker Compose on a machine that can reach your cameras. From your application, add a video source with the Python SDK and receive one record per sampled frame: the detections plus the frame as a JPEG. Nothing is written to disk.
-
-| Image | What it does | Events |
+| Image | Function | Events |
 | --- | --- | --- |
-| `inferencetech/visionext-objects` | Detects people and animals (bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe) | `object.detected` |
-| `inferencetech/visionext-faces` | Detects faces and optionally matches them against a photo gallery you supply | `face.detected`, `face.recognized` |
+| `inferencetech/visionext-objects` | Detection of people and animals (bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe) | `object.detected` |
+| `inferencetech/visionext-faces` | Face detection, with identification against a photo gallery when one is supplied | `face.detected`, `face.recognized` |
 
-`inferencetech/visionext-dashboard` is a web page for operating the engines by hand: add sources, watch frames and detections, inspect records. It needs no GPU and no code. See [Dashboard](#dashboard).
+A third image, `inferencetech/visionext-dashboard`, provides a browser interface for operating the engines without code. It requires no GPU. See [Dashboard](#dashboard).
 
-**Contents:** [Requirements](#requirements) · [Quick Start](#quick-start) · [Dashboard](#dashboard) · [Sources](#sources) · [SDK](#sdk) ([Errors](#errors), [`connect()` Options](#connect-options), [`Record`](#record), [`Event`](#event), [`Source`](#source)) · [Face Gallery](#face-gallery) · [Troubleshooting](#troubleshooting)
+The demonstration images are public on Docker Hub. Production images are distributed privately under a commercial licensing agreement, with pull credentials issued by Inference Tech.
+
+**Contents:** [Requirements](#requirements) · [Deployment](#deployment) · [Integration](#integration) · [Sources](#sources) · [SDK Reference](#sdk-reference) · [Dashboard](#dashboard) · [Face Gallery](#face-gallery) · [Security](#security) · [Troubleshooting](#troubleshooting)
 
 ## Requirements
 
-- Linux host with an NVIDIA GPU, NVIDIA driver 525 or newer, Docker Compose v2 and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
-- Disk: about 16 GB for `visionext-objects`, 9 GB for `visionext-faces`, under 100 MB for the dashboard.
-- Python 3.10+ on the machine that consumes the records.
+- A Linux host with an NVIDIA GPU, NVIDIA driver 525 or later, Docker Compose v2 and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). The engines do not run on CPU.
+- Disk space of roughly 16 GB for `visionext-objects` and 9 GB for `visionext-faces`. The dashboard is under 100 MB.
+- Python 3.10 or later on any machine with network access to the published ports.
 
-## Quick Start
+## Deployment
 
-### 1. Start the Containers
-
-Create a `compose.yaml`:
+Place the following in `compose.yaml` and run `docker compose up -d`:
 
 ```yaml
 services:
@@ -66,23 +60,23 @@ volumes:
   uploads:
 ```
 
-```bash
-docker compose up -d
-```
+The first start pulls about 9 GB. The service names `objects` and `faces` are significant, since the dashboard resolves the engines by name. Pin an explicit version tag in anything you deploy.
 
-The first start downloads about 9 GB. If you pulled `1.0.0` before 16 September 2026, run `docker compose pull` once: the images were rebuilt under the same tag. Keep the service names `objects` and `faces`, the dashboard finds the engines by those names. Pin a version tag in anything you deploy.
+An engine accepts connections once its model is loaded, a few seconds after start. The dashboard at `http://<host>:8767` reports each engine as **Connected** at that point. The compose file binds the engines to the loopback interface and the dashboard to all interfaces. See [Security](#security) before changing either.
 
-Open `http://<host>:8767`. Each engine shows **Connected** once its model is loaded, a few seconds after start. You can add a camera there, or continue with the SDK.
+### SDK
 
-### 2. Install the SDK
+The SDK is distributed as a wheel in this repository. Its version tracks the image tag, so install the wheel that matches the images you deployed:
 
 ```bash
 pip install https://github.com/inference-asia/visionext/raw/main/visionext-1.0.0-py3-none-any.whl
 ```
 
-The wheel is published in this repository. Install the version that matches your image tag. The package is `visionext` and depends only on `websockets`.
+The package imports as `visionext` and depends only on `websockets`.
 
-### 3. Add a Source and Read Records
+## Integration
+
+### Consuming Records
 
 ```python
 import visionext
@@ -95,11 +89,11 @@ for record in stream:
         print(record.source_id, record.frame_index, event.label, round(event.confidence, 2), event.bbox.rounded())
 ```
 
-Every 25th frame is printed with its detections. Ctrl-C stops the script. The container keeps its sources until you remove them or it restarts. The fields are listed under [`Record`](#record) and [`Event`](#event).
+Iteration blocks and yields one [`Record`](#record) for every sampled frame from every source registered with the engine. Each record carries its [`Event`](#event)s. Ctrl-C terminates the script. The engine keeps the source until it is removed or the engine restarts.
 
-### 4. Objects and Faces at the Same Time
+### Running Both Engines
 
-The containers are independent, with their own endpoints (8765 and 8766 above) and their own source lists. Add a source to both to analyse it with both. Iterating a stream blocks, so use one thread per container:
+The engines are independent, each with its own endpoint (8765 and 8766 in the compose file above) and its own source list. A source that needs both analyses is added to both. Because iteration blocks, dedicate a thread to each engine:
 
 ```python
 import threading
@@ -127,26 +121,11 @@ for t in threads:
     t.join()
 ```
 
-Without a gallery every face is `unknown`. See [Face Gallery](#face-gallery).
-
-## Dashboard
-
-<p align="center"><img src="screenshot.png" alt="The VisioNext dashboard showing live detections" width="900"></p>
-
-The dashboard is a client like your application. The menu switches between **Object Detection** and **Face Recognition**, each with:
-
-- **Sources**: add a stream URL or a file path inside the container, set `every_n_frames`, remove sources. The list is the engine's own, so sources added from the SDK appear here too.
-- **Files**: upload a video (up to 4 GB) and add it to the engine with one click. Uploads live in the `uploads` volume, shared by every engine, and the SDK can add them as `/uploads/<name>`. Delete them from the same dialog.
-- **Live**: the latest sampled frame of every source with its detections drawn on it. Click a frame to see the record, its events and the JSON your application receives.
-- **Records**: the most recent records, newest first, with their detections and confidence.
-
-While the page is open, both engines process frames for it, so a file source plays while you watch even with no application connected.
-
-The dashboard has no login. The quick start publishes it on every interface of the host, so anyone on that network can add sources, upload videos and see frames. Keep the host on a private network, or bind the port to `127.0.0.1` and use an SSH tunnel or an authenticating reverse proxy. Do not expose it to the public internet.
+Without a gallery, face events carry the identity `unknown`. See [Face Gallery](#face-gallery).
 
 ## Sources
 
-A source is a stream URL (`rtsp://`, `rtmp://`, anything FFmpeg can open) or a video file path inside the container. Host paths are rejected. Mount the directory into every container that should read it:
+A source is either a stream URL (`rtsp://`, `rtmp://`, or any scheme FFmpeg supports) or the path of a video file inside the container. The engine has no view of the host filesystem, so files reach it only through a mounted volume:
 
 ```yaml
     volumes:
@@ -157,23 +136,27 @@ A source is a stream URL (`rtsp://`, `rtmp://`, anything FFmpeg can open) or a v
 stream.add_source("/input/clip.mp4", every_n_frames=10)
 ```
 
-Videos uploaded through the [Dashboard](#dashboard) are already in every engine as `/uploads/<name>`.
+Videos uploaded through the [Dashboard](#dashboard) are mounted in every engine at `/uploads/<name>`.
 
-- `source_id` is carried by every record from the source. It defaults to the last path segment of the input without extension (`/input/clip.mp4` → `clip`). Letters, digits, `.`, `_` and `-` only, unique per container.
-- `every_n_frames` processes every Nth frame and drops the others.
-- Frames are only processed while at least one client is connected. A file pauses while nobody is connected, so nothing is skipped.
-- A file is read once at its own frame rate, like a camera. When it ends the container removes it and notifies your client (`ended`).
-- A stream that drops is retried with exponential backoff (1 s doubling up to 60 s) until you remove it. Your client is notified when it is `lost` and when it is `opened` again. Adding an unreachable stream succeeds with status `reconnecting`.
-- Sources live in the container's memory. After a restart the list is empty. The SDK re-adds its own sources when it reconnects.
-- Anyone who can reach the port can add sources and receive frames. Keep it on a private interface, as in the quick start, or behind an authenticating reverse proxy.
+### Identification and Sampling
 
-## SDK
+- `source_id` labels every record from the source. It defaults to the file name without extension (`/input/clip.mp4` becomes `clip`). Permitted characters are letters, digits, `.`, `_` and `-`, and ids are unique per engine.
+- `every_n_frames` sets the sampling interval. Frames N, 2N, 3N and so on are analysed and the remainder are discarded.
+
+### Lifecycle
+
+- Analysis is gated on client presence. With no client connected, streams are kept current but not analysed, and files pause so that no content is lost.
+- Files are read once, at their native frame rate, so a one-minute clip occupies one minute regardless of the sampling interval. At end of file the engine notifies clients (`ended`) and removes the source.
+- A stream that fails is reconnected with exponential backoff, from 1 s doubling to a ceiling of 60 s, until it is removed. Clients are notified on failure (`lost`) and on recovery (`opened`). Adding an unreachable stream succeeds and reports the status `reconnecting`.
+- Source lists are held in memory and cleared by a restart. The SDK re-registers the sources it added when it reconnects. The dashboard does not.
+
+## SDK Reference
 
 ```python
 stream = visionext.connect("ws://localhost:8765")
 ```
 
-`connect()` waits for the container to come up, reconnects if it restarts, and re-adds the sources added through it. Arguments are under [`connect()` Options](#connect-options). Records are [`Record`](#record)s holding [`Event`](#event)s, source methods return [`Source`](#source)s, failures raise the exceptions in [Errors](#errors).
+`connect()` waits for the engine to become available, reconnects after a restart or network interruption, and re-registers the sources added through it. Its arguments are listed under [`connect()` Options](#connect-options). Failures raise the exceptions under [Errors](#errors).
 
 ```python
 stream.add_source(input, source_id=None, every_n_frames=1)   # returns a Source
@@ -187,7 +170,7 @@ for record in stream.detections(): ...                        # only frames with
 for event in stream.events(): ...                             # detections, each with event.record
 ```
 
-Source notifications (`added`, `removed`, `opened`, `lost`, `ended`):
+Source notifications (`added`, `removed`, `opened`, `lost`, `ended`) are delivered to an optional callback:
 
 ```python
 def on_source(event, source):
@@ -198,14 +181,14 @@ def on_source(event, source):
 stream = visionext.connect("ws://localhost:8765", on_source=on_source)
 ```
 
-Save the JPEG of every frame with detections:
+Persisting the frames that contain detections:
 
 ```python
 for record in stream.detections():
     record.frame.save(f"hits/{record.source_id}/{record.frame_index:012d}.jpg")
 ```
 
-asyncio:
+The asyncio variant offers the same interface with awaitable methods:
 
 ```python
 async with visionext.aconnect("ws://localhost:8765") as stream:
@@ -223,21 +206,21 @@ except visionext.RequestError as exc:
     print(exc.action, exc)        # add cannot open /input/missing.mp4
 ```
 
-| Exception | When |
+| Exception | Raised when |
 | --- | --- |
-| `RequestError` | The container rejected the request: unreadable file (see [Troubleshooting](#troubleshooting)), `source_id` already used by another input, unknown `source_id`. `str(exc)` is the reason. |
-| `RequestTimeout` | No reply within `request_timeout` (default 30 s). Adding an unreachable stream takes up to 10 s. |
-| `StreamClosed` | The stream was closed while a request was pending. |
-| `ConnectionError` | Nothing reachable within `connect_timeout` (default: wait forever). |
+| `RequestError` | The engine rejected the request: an unreadable file (see [Troubleshooting](#troubleshooting)), a `source_id` already bound to a different input, or an unknown `source_id`. `str(exc)` gives the reason. |
+| `RequestTimeout` | No reply arrived within `request_timeout` (default 30 s). Adding an unreachable stream can take up to 10 s. |
+| `StreamClosed` | The connection closed while a request was pending. |
+| `ConnectionError` | No engine was reachable within `connect_timeout` (default: wait indefinitely). |
 
-Stream drops and file ends are not exceptions. They arrive through `on_source`.
+Stream failures and file ends are not exceptions. They arrive as notifications through `on_source`.
 
 ### `connect()` Options
 
 | Argument | Default | Meaning |
 | --- | --- | --- |
-| `reconnect` | `True` | Reconnect after a container restart or network drop and re-add this stream's sources. |
-| `retry_every` | `2.0` | Seconds between attempts while the container is unreachable. |
+| `reconnect` | `True` | Reconnect after an engine restart or network interruption and re-register this stream's sources. |
+| `retry_every` | `2.0` | Seconds between connection attempts while the engine is unreachable. |
 | `connect_timeout` | `None` | Raise `ConnectionError` after this many seconds without a connection. |
 | `request_timeout` | `30.0` | Seconds to wait for a reply to a source request. |
 | `on_source` | `None` | `callback(event, source)`. |
@@ -247,31 +230,44 @@ Stream drops and file ends are not exceptions. They arrive through `on_source`.
 | Field | Meaning |
 | --- | --- |
 | `source_id` | The source the frame came from. |
-| `timestamp` | Processing time, timezone-aware `datetime` (UTC). |
-| `frame_index` | 1-based frame number within the source, counting every frame read. With `every_n_frames=25` you get 25, 50, 75, … |
-| `frame_width`, `frame_height`, `size` | Pixel size. |
-| `events` | `list[Event]`, see [`Event`](#event). `objects` and `faces` filter by kind. Empty when nothing was detected. |
-| `frame` | The unannotated frame as JPEG: `frame.bytes`, `frame.save(path)`, `frame.to_pil()` (needs Pillow), `frame.to_numpy()` (needs numpy and OpenCV, BGR). |
+| `timestamp` | Processing time as a timezone-aware `datetime` in UTC. |
+| `frame_index` | 1-based position of the frame within the source, counting every frame read. With `every_n_frames=25` the values are 25, 50, 75, … |
+| `frame_width`, `frame_height`, `size` | Pixel dimensions. |
+| `events` | `list[Event]`. `objects` and `faces` filter by kind. Empty when nothing was detected. |
+| `frame` | The unannotated frame as JPEG: `frame.bytes`, `frame.save(path)`, `frame.to_pil()` (requires Pillow), `frame.to_numpy()` (requires numpy and OpenCV, BGR). |
 
 ### `Event`
 
 | Field | Meaning |
 | --- | --- |
-| `name` | `object.detected`, `face.detected` or `face.recognized`. Shortcuts: `is_object`, `is_face`, `recognized`. |
+| `name` | `object.detected`, `face.detected` or `face.recognized`. Predicates: `is_object`, `is_face`, `recognized`. |
 | `label` | The class name (`"person"`, `"dog"`, `"horse"`) for objects, the gallery identity or `"unknown"` for faces. |
-| `confidence` | 0 to 1. Only detections at or above the detector's threshold (0.5) are emitted. |
-| `bbox` | `BBox(x1, y1, x2, y2)` in pixels, with `width`, `height`, `area`, `center`, `rounded()`, `contains(x, y)`. |
-| `class_id` | Objects: numeric class id. `1` is person, `16` to `25` are the animals. `visionext.COCO_LABELS` maps ids to names. |
-| `identity`, `similarity`, `landmarks` | Faces: gallery identity (see [Face Gallery](#face-gallery)), cosine similarity to it, five `Point(x, y)` (eyes, nose, mouth corners). |
+| `confidence` | 0 to 1. Detections below the detector threshold of 0.5 are not emitted. |
+| `bbox` | `BBox(x1, y1, x2, y2)` in pixels, with `width`, `height`, `area`, `center`, `rounded()` and `contains(x, y)`. |
+| `class_id` | Objects only: the numeric class id. `1` is person, `16` to `25` are the animals. `visionext.COCO_LABELS` maps ids to names. |
+| `identity`, `similarity`, `landmarks` | Faces only: the gallery identity (see [Face Gallery](#face-gallery)), the cosine similarity to it, and five `Point(x, y)` landmarks (eyes, nose, mouth corners). |
 | `record` | The `Record` this event belongs to. |
 
 ### `Source`
 
 `source_id`, `input` (credentials removed), `kind` (`file` or `stream`), `every_n_frames`, `status` (`open`, `reconnecting`, `ended`, `removed`), `frame_index`.
 
+## Dashboard
+
+<p align="center"><img src="screenshot.png" alt="The VisioNext dashboard showing live detections" width="900"></p>
+
+The dashboard is a client of the engines in the same sense as your application. Its menu switches between **Object Detection** and **Face Recognition**, and each engine page offers:
+
+- **Sources**: add a stream URL or an in-container file path with a sampling interval, and remove sources. The list is the engine's own, so sources registered through the SDK appear here as well.
+- **Files**: upload a video of up to 4 GB and add it to the engine in one step. Uploads persist in the `uploads` volume, which every engine mounts, and remain addressable from the SDK as `/uploads/<name>` until deleted from the same dialog.
+- **Live**: the latest sampled frame from each source with its detections overlaid. Selecting a frame opens the underlying record, its events and the JSON your application receives.
+- **Records**: the most recent records, newest first, with their detections and confidence values.
+
+Because the dashboard is a client, both engines analyse frames whenever the page is open in a browser. A file source therefore plays while you watch it, whether or not an application is connected.
+
 ## Face Gallery
 
-`visionext-faces` recognizes people from photos you provide: one sub-folder per person, named with the identity you want in `event.identity`, mounted read-only at `/gallery`:
+`visionext-faces` identifies people from reference photos supplied in a directory mounted read-only at `/gallery`. Each sub-folder names one identity, which is reported as `event.identity`, and holds that person's photos:
 
 ```
 gallery/
@@ -279,21 +275,27 @@ gallery/
   bob/     bob.png
 ```
 
-- Formats: `.jpg .jpeg .png .bmp .webp`. Clear, frontal faces, 2 to 5 photos per person. Frames from the camera itself are fine.
-- Read once at startup. `docker compose restart faces` after changing photos. `docker compose logs faces` shows `Gallery: N identities from M images`.
-- No gallery means detection only. Every face is `"unknown"` and `event.recognized` is false.
-- A match needs similarity 0.45 or more. If someone is reported unknown with similarity just below that, add more clear photos of them.
+- Accepted formats are `.jpg`, `.jpeg`, `.png`, `.bmp` and `.webp`. Use clear, frontal faces, two to five per person. Frames captured by the camera itself are suitable.
+- The gallery is read once at startup, so changes require `docker compose restart faces`. The log line `Gallery: N identities from M images` in `docker compose logs faces` confirms what was loaded.
+- Without a gallery the engine performs detection only. Every face is `"unknown"` and `event.recognized` is false.
+- A match requires a similarity of 0.45 or higher. A person consistently reported as unknown with a similarity just below that threshold needs more, or clearer, photos.
 
-Face photos are biometric data. Make sure you have consent and a legal basis before deploying recognition.
+## Security
+
+The engine endpoint is unauthenticated, and the dashboard has no login. Any host that can reach an engine port can register sources and receive frames. Any host that can reach the dashboard can do the same and also upload videos. The compose file above therefore binds the engines to `127.0.0.1` and publishes only the dashboard on all interfaces, which is appropriate for a private network. Beyond that, bind the dashboard to `127.0.0.1` as well and place an SSH tunnel or an authenticating reverse proxy in front of it. Neither the engines nor the dashboard should be reachable from the public internet.
+
+Stream credentials embedded in a source URL are stripped from every record, notification and log line the engine produces.
+
+Face photos are biometric data. Establish consent and a legal basis before deploying recognition.
 
 ## Troubleshooting
 
-| Symptom | Cause / fix |
+| Symptom | Cause and remedy |
 | --- | --- |
-| `CUDA is required but unavailable` in `docker compose logs` | The GPU is not visible to the container. Check `gpus: all`, the NVIDIA Container Toolkit, and that `nvidia-smi` works on the host. |
-| The dashboard shows **Reconnecting** for an engine | The engine is still loading (a few seconds after start), or its compose service is not named `objects` / `faces`. |
-| `connect()` keeps waiting | The container is still loading (`docker compose logs` shows `Listening on` when ready), the port is not published, or the host port is wrong. |
-| Connected but no records | No sources (`stream.list_sources()`), or the source is `reconnecting`: check the URL and credentials. See [Sources](#sources). |
-| `RequestError: no such file inside the container: …` | You passed a host path, or the volume is not mounted. Mount the directory (see [Sources](#sources)) and use the path inside the container, for example `/input/video.mp4`. |
-| `Client … is not keeping up: dropping its oldest records` in the logs | Your client reads slower than records are produced. Read faster or raise `every_n_frames`. |
-| Every face is `unknown` despite a gallery | Check the logs for `Gallery: N identities`. 0 means the folder is not mounted at `/gallery` or has no readable faces. See [Face Gallery](#face-gallery). |
+| `CUDA is required but unavailable` in `docker compose logs` | The GPU is not visible to the container. Verify `gpus: all`, the NVIDIA Container Toolkit installation, and that `nvidia-smi` works on the host. |
+| The dashboard reports **Reconnecting** for an engine | The engine is still loading, or its compose service is not named `objects` or `faces`. |
+| `connect()` never returns | The engine is still loading (`docker compose logs` prints `Listening on` when ready), the port is not published, or the host port is wrong. |
+| Connected but no records arrive | No sources are registered (`stream.list_sources()`), or the source is `reconnecting`. Check the URL and credentials. |
+| `RequestError: no such file inside the container: …` | The path is a host path, or the volume is not mounted. Mount the directory as shown under [Sources](#sources) and use the in-container path. |
+| `Client … is not keeping up: dropping its oldest records` in the logs | The client consumes records more slowly than the engine produces them. Consume faster or raise `every_n_frames`. |
+| Every face is `unknown` despite a gallery | Check the logs for `Gallery: N identities`. Zero means the directory is not mounted at `/gallery` or contains no readable faces. |
